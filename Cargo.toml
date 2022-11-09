@@ -1,5 +1,5 @@
 [package]
-name = "adventure_rs"
+name = "bevy_adventure"
 version = "0.1.0"
 edition = "2021"
 
@@ -9,4 +9,33 @@ edition = "2021"
 name = "adventure-game"
 
 [dependencies]
-hecs = "0.9"
+# The compiled keywords list
+phf = { version = "0.11.1", features = ["macros"] }
+# Macros
+bevy_adventure_derive = {path = "bevy_adventure_derive"}
+
+[dependencies.bevy]
+version = "0.8.1"
+default-features = false
+features = [
+    # Core Bevy
+    "bevy_core_pipeline",
+    # Bevy windowing & UI
+    "bevy_winit",
+    "bevy_text",
+    "bevy_ui", "bevy_asset",
+    "bevy_render",
+    "bevy_sprite",
+    # Linux compatibility
+    "x11",
+    "wayland"
+]
+
+# Enable a small amount of optimization in debug mode
+[profile.dev]
+opt-level = 1
+
+# Enable high optimizations for dependencies (incl. Bevy), but not for our code:
+[profile.dev.package."*"]
+opt-level = 3
+

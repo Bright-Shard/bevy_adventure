@@ -1,3 +1,9 @@
+use bevy::prelude::Component;
+
+// ========== ENTITY COMPONENTS ==========
+
+// Entity health
+#[derive(Component)]
 pub struct Health(pub i32);
 
 impl Health {
@@ -11,4 +17,43 @@ impl Health {
         self.0 = health;
     }
 }
+
+// For naming entities
+#[derive(Component)]
 pub struct Name(pub String);
+
+// For giving entities descriptions
+#[derive(Component)]
+pub struct Description(pub String);
+
+// ========== LEVEL COMPONENTS ==========
+
+// A room in the game
+#[derive(Component)]
+pub struct Room {
+    pub name: String,
+    pub description: String
+}
+impl Room {
+    pub fn new(name: &str, description: &str) -> Self {
+        Self {
+            name: name.to_string(),
+            description: description.to_string()
+        }
+    }
+}
+
+// The currently active room
+#[derive(Component)]
+pub struct ActiveRoom;
+
+
+
+// A level in the game
+#[derive(Component)]
+pub struct Level;
+
+// The currently active level
+#[derive(Component)]
+pub struct ActiveLevel;
+

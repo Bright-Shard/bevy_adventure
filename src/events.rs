@@ -1,22 +1,36 @@
-// Local imports
-use crate::Game;
+use bevy::prelude::{Component, Commands};
+use crate::input_manager::WordType;
+use bevy::ecs::schedule::IntoSystemDescriptor;
+//use bevy_adventure_derive::Event;
 
-// Data for the event
-pub trait EventData {}
+// The basic handler type for events
+pub type EventHandlerBase = fn(&Commands);
+// Event handler for OnInteract
+pub type InteractionHandler = fn(&mut Commands, WordType);
 
-// The Event trait
-pub trait Event {
-    fn fire(&self, game: &mut Game);
-}
+// EventHandler trait
+pub trait EventHandler {}
+impl EventHandler for EventHandlerBase {}
 
-// Handlers for events
-pub type EventHandler = fn(&mut Game);
+// Game events - they all store a handler, but have different types so that
+//  they can be different components in ECS
 
-// Game events - these are structs, so they can be used as components in hecs
-pub struct OnDeath(EventHandler);
-impl Event for OnDeath {
-    fn fire(&self, game: &mut Game) {
-        self.0(game);
-    }
-}
-pub struct OnInteract(EventHandler);
+// When an entity dies
+#[derive(Component)]
+pub struct OnDeath(pub EventHandlerBase);
+
+// When an entity is interacted with
+#[derive(Component)]
+pub struct OnInteract(pub InteractionHandler);
+
+// When an entity is looked at
+#[derive(Component)]
+pub struct OnView(pub EventHandlerBase);
+
+// When a player enters a room
+#[derive(Component)]
+pub struct OnEnter(pub EventHandlerBase);
+
+// Same as above, but it just prints text
+#[derive(Component)]
+pub struct OnEnterText(pub String);

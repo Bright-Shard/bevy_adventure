@@ -1,48 +1,39 @@
-use adventure_rs::{Game, components::*, events::*, level::*};
-use hecs::World;
+use bevy::prelude::*;
+use bevy_adventure::prelude::*;
 
-struct Damage(i32);
+fn build_level_one(mut commands: Commands) {
+    let doorway = commands.spawn()
+        .insert(OnInteract(|commands, interaction_type| {
+            commands.set_room("Room 2".to_string());
+            println!("Moved to Room 2 because of interaction {:?}", interaction_type)
+        }))
+        .insert(Name("door".to_owned()))
+        .id();
 
-fn entry_level <'a> () -> Level {
-    Level::new()
-        .add_room(
-            Room::new()
-                .on_enter(|_, _| println!("Room 1 entered"))
+    let initial_room = commands.spawn()
+        .insert(Room::new("Room 1", "You're in room 1"))
+        .insert(OnEnterText("You wake up in a cold, dark room.".to_string()))
+        .insert(ActiveRoom)
+        .add_child(doorway)
+        .id();
+    
+    let room_two = commands.spawn()
+        .insert(Room::new("Room 2", "You're in room 2"))
+        .insert(OnEnterText(
+            "Compared to the last room, this room is much warmer and brighter.".to_string())
         )
-        .add_room(
-            Room::new()
-                .on_enter(|_, _| println!("Room 2 entered"))
-        )
-}
-
-fn spawn_entities(world: &mut World, amount: usize, starting_health: i32) {
-    let entities = (0..amount)
-        .map(|_| {
-            let health = Health(starting_health);
-            let name = Name("eee".into());
-            let on_death = OnDeath(||println!("Entity died"));
-            
-            (health, name, on_death)
-        });
-    world.spawn_batch(entities);
-}
-
-fn spawn_boss(world: &mut World) {
-    let name = Name("BossMan".into());
-    let health = Health(50);
-    let on_death = OnDeath(||{
-        println!("WTF, the boss has died!!!!");
-    });
-
-    world.spawn((name, health, on_death));
+        .id();
+    
+    commands.spawn()
+        .insert(Level)
+        .add_child(initial_room)
+        .add_child(room_two)
+    ;
 }
 
 fn main() {
-    let mut game = Game::new();
-
-    game.world.spawn((Damage(0), 0));
-    spawn_entities(&mut game.world, 10, 20);
-    spawn_boss(&mut game.world);
-
-    game.start();
+    App::new()
+        .add_plugin(AdventurePlugin)
+        .add_startup_system(build_level_one)
+        .run();
 }

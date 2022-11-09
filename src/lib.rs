@@ -1,55 +1,67 @@
-// Local libraries
+// Local files
 mod input_manager;
 mod systems;
+mod components;
+mod events;
+mod adventure_commands;
 
 // Exports
-pub mod components;
-pub mod events;
-pub mod level;
-
-// Imports from local libraries
-use systems::*;
-use input_manager::InputManager;
-use events::{EventHandler, Event};
-
-// Other libraries
-use hecs::World;
-
-// Types
-type GameSystem = fn(&mut Game);
-
-// The main game
-pub struct Game {
-    pub world: World,
-    pub systems: Vec<GameSystem>,
-    pub input: InputManager
+pub mod prelude {
+    pub use crate::input_manager::{InputManager, WordType};
+    pub use crate::components::*;
+    pub use crate::events::*;
+    pub use crate::adventure_commands::AdventureCommands;
+    pub use crate::AdventurePlugin;
 }
-// Constructor
-impl Game {
-    pub fn new() -> Self {
-        let mut game_systems = Vec::<GameSystem>::new();
+pub use input_manager::InputManager;
+pub use components::*;
+pub use events::*;
 
-        game_systems.push(system_handle_dead);
+// Imports from local files
 
-        Self {
-            world: World::new(),
-            systems: game_systems,
-            input: InputManager::new()
-        }
+// Libraries
+use bevy::prelude::*;
+use bevy::app::PluginGroupBuilder;
+
+// Additional plugins for an adventure game
+// Core ones are added by the MinimalPlugins plugins group
+struct AdventureDefaultPlugins;
+impl PluginGroup for AdventureDefaultPlugins {
+    fn build(&mut self, group: &mut PluginGroupBuilder) {
+        // Hierarchy for objects in the game
+        group.add(bevy::hierarchy::HierarchyPlugin::default());
+        // Player input
+        group.add(bevy::input::InputPlugin::default());
+
+        /*
+        // Windowing
+        group.add(bevy::window::WindowPlugin::default());
+        group.add(bevy::winit::WinitPlugin::default());
+        // UI & Text
+        group.add(bevy::ui::UiPlugin::default());
+        group.add(bevy::text::TextPlugin::default());
+        */
     }
 }
-// Methods
-impl Game {
-    pub fn add_system(&mut self, system: GameSystem) {
-        self.systems.push(system);
-    }
-    pub fn start(&mut self) {
-        loop {
-            self.update();
-        }
-    }
-    pub fn update(&mut self) {
-        let game_systems = self.systems.clone();
-        game_systems.iter().for_each(|system| system(self));
+
+// The Bevy plugin
+pub struct AdventurePlugin;
+impl Plugin for AdventurePlugin {
+    fn build (&self, app: &mut App) {
+        // In development, add a code-checking system
+        #[cfg(debug_assertions)]
+        app.add_startup_system_set_to_stage(
+            StartupStage::PostStartup,
+            systems::build_debug_system_set()
+        );
+        
+        // All normal systems & plugins
+        app
+            // Core Bevy plugins
+            .add_plugins(MinimalPlugins)
+            // Other plugins needed for adventure games
+            .add_plugins(AdventureDefaultPlugins)
+            // The systems for adventure games
+            .add_system_set(systems::build_system_set());
     }
 }
