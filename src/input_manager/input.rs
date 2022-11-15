@@ -1,44 +1,17 @@
-use crate::InputManager;
+use crate::{InputManager, ActiveRoom};
 use std::{str::FromStr, io::{stdout, stdin, Write}};
 use core::any::TypeId;
 
-use bevy::prelude::{Query, Without, Commands};
+use bevy::{prelude::{Query, Entity, Children, HierarchyQueryExt, World, With}, ecs::system::SystemState};
 
 use crate::input_manager::keywords::WordType;
-use crate::components::{ActiveRoom, Name};
-use crate::events::{OnInteract, OnView};
+use crate::components::Name;
 
 // Errors when parsing input
 pub enum ParseError {
     NoRegisteredEvent,
     NoTarget,
     NoAction
-}
-
-// Target of player input
-struct Target <'a> {
-    on_view: Option<&'a OnView>,
-    on_interact: Option<&'a OnInteract>
-}
-impl <'a> Target <'a> {
-    pub fn view(&self, commands: Commands) -> Result<(), ParseError> {
-        match self.on_view {
-            None => Err(ParseError::NoRegisteredEvent),
-            Some(view_event) => {
-                view_event.0(&commands);
-                Ok(())
-            }
-        }
-    }
-    pub fn interact(&self, mut commands: Commands, keyword: WordType) -> Result<(), ParseError> {
-        match self.on_interact {
-            None => Err(ParseError::NoRegisteredEvent),
-            Some(interaction_event) => {
-                interaction_event.0(&mut commands, keyword);
-                Ok(())
-            }
-        }
-    }
 }
 
 // The returned user input
@@ -67,49 +40,60 @@ impl <T: FromStr> Input <T> {
     }
 }
 impl Input <String> {
-    pub fn parse(
-        &self,
-        keywords: phf::Map<&'static str, WordType>,
-        named_entities: Query<(&Name, Option<&OnView>, Option<&OnInteract>), Without<ActiveRoom>>,
-        commands: Commands
-    ) -> Result<(), ParseError> {
+    // Gets the target and action, then runs appropriate handlers
+    pub fn parse_action(&self, keywords: phf::Map<&'static str, WordType>, world: &mut World) -> Result<Entity, ParseError> {
+
+        // This system's queries
+        let mut state: SystemState<(
+            Query<&Children>,
+            Query<Entity, With<ActiveRoom>>,
+            Query<&Name>
+        )> = SystemState::new(world);
+        let (children, active_room, names) = state.get(world);
+
         let split = self.value.split_whitespace();
 
         let mut potential_targets = Vec::new();
         let mut action = WordType::Ignore;
-        let mut target: Option<Target> = None;
 
+        // Iterate through words and see if they are keywords or not
         split.for_each(|word| {
             match keywords.get(&word.to_lowercase()) {
+                // If it isn't a keyword, it might be a target
                 None => potential_targets.push(word),
+                // If it is a keyword,
                 Some(word_type) => match word_type {
+                    // Either ignore it
                     WordType::Ignore => {},
+                    // Or set it as the action.
                     _ => action = word_type.clone()
                 }
             }
         });
 
-        for potential_target in potential_targets {
-            for (name, on_view, on_interact) in &named_entities {
-                if name.0 == potential_target {
-                    target = Some(Target {
-                        on_interact,
-                        on_view
-                    });
-                }
+        // If an action type wasn't identified, error out
+        if let WordType::Ignore = action {
+            return Err(ParseError::NoAction);
+        }
+
+        // Try and get the target of the action
+        // Iterate through the active children
+        for child in children.iter_descendants(active_room.get_single().unwrap()) {
+            // See if the child has a name
+            match names.get(child) {
+                Ok(name) => {
+                    // If it does, see if that name is in potential_targets
+                    if potential_targets.iter().any(|test_name| *test_name == &name.0) {
+                        // We've found the target!
+                        return Ok(child);
+                    }
+                },
+                Err(_) => {}
             }
         }
 
-        match target {
-            None => Err(ParseError::NoTarget),
-            Some(target) => {
-                match action {
-                    WordType::Ignore => Err(ParseError::NoAction),
-                    WordType::Look => target.view(commands),
-                    keyword => target.interact(commands, keyword)
-                }
-            }
-        }
+        // If we haven't identified the target already, error that it wasn't found
+        Err(ParseError::NoTarget)
     }
 }
 impl Input <i32> {

@@ -27,20 +27,16 @@ use bevy::app::PluginGroupBuilder;
 // Core ones are added by the MinimalPlugins plugins group
 struct AdventureDefaultPlugins;
 impl PluginGroup for AdventureDefaultPlugins {
-    fn build(&mut self, group: &mut PluginGroupBuilder) {
-        // Hierarchy for objects in the game
-        group.add(bevy::hierarchy::HierarchyPlugin::default());
-        // Player input
-        group.add(bevy::input::InputPlugin::default());
+    fn build(self) -> PluginGroupBuilder {
+        PluginGroupBuilder::start::<Self>()
+            // Hierarchy for objects in the game
+            .add(bevy::hierarchy::HierarchyPlugin::default())
+            // Player input
+            .add(bevy::input::InputPlugin::default())
+    }
 
-        /*
-        // Windowing
-        group.add(bevy::window::WindowPlugin::default());
-        group.add(bevy::winit::WinitPlugin::default());
-        // UI & Text
-        group.add(bevy::ui::UiPlugin::default());
-        group.add(bevy::text::TextPlugin::default());
-        */
+    fn name() -> String {
+        return String::from("BevyAdventurePlugins")
     }
 }
 
@@ -55,13 +51,14 @@ impl Plugin for AdventurePlugin {
             systems::build_debug_system_set()
         );
         
-        // All normal systems & plugins
+        // Add plugins
         app
             // Core Bevy plugins
             .add_plugins(MinimalPlugins)
             // Other plugins needed for adventure games
-            .add_plugins(AdventureDefaultPlugins)
-            // The systems for adventure games
-            .add_system_set(systems::build_system_set());
+            .add_plugins(AdventureDefaultPlugins);
+        
+        // Add systems
+        systems::append_systems(app);
     }
 }

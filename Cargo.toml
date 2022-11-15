@@ -15,20 +15,11 @@ phf = { version = "0.11.1", features = ["macros"] }
 bevy_adventure_derive = {path = "bevy_adventure_derive"}
 
 [dependencies.bevy]
-version = "0.8.1"
+version = "0.9"
 default-features = false
 features = [
     # Core Bevy
-    "bevy_core_pipeline",
-    # Bevy windowing & UI
-    "bevy_winit",
-    "bevy_text",
-    "bevy_ui", "bevy_asset",
-    "bevy_render",
-    "bevy_sprite",
-    # Linux compatibility
-    "x11",
-    "wayland"
+    "bevy_core_pipeline"
 ]
 
 # Enable a small amount of optimization in debug mode

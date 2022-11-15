@@ -1,84 +1,163 @@
+use std::sync::{Arc, Mutex};
+
 // Libraries
-use bevy::prelude::{Query, Entity, Commands, With, Added, SystemSet, Without, ParallelSystemDescriptorCoercion};
+use bevy::{prelude::*, ecs::system::SystemState};
 // Local imports
 use crate::{components::*, events::*, InputManager};
+// There's a Name in bevy::prelude and crate::components
 
-pub fn build_system_set() -> SystemSet {
-    return SystemSet::new()
-        .with_system(new_room_event)
-        .with_system(handle_active_room.after(new_room_event))
-        .with_system(handle_dead)
+
+
+// ========== ADD SYSTEMS ==========
+
+pub fn append_systems(app: &mut App) {
+    // Init events at startup
+    app.add_startup_system_to_stage(StartupStage::PostStartup, init_events);
+    // All the other systems
+    app.add_system_set_to_stage(CoreStage::PreUpdate, build_system_set());
 }
 
-// Clear dead entities, and run their OnDeath even if they have one
-fn handle_dead(mut commands: Commands, query: Query<(Entity, &Health, Option<&OnDeath>)>) {
+
+
+// ========== NORMAL SYSTEMS ==========
+
+// The normal systems in bevy_adventure
+fn build_system_set() -> SystemSet {
+    return SystemSet::new()
+        // First, handle dead entities
+        .with_system(handle_dead)
+        // Then, trigger any new room events
+        .with_system(new_room_event.after(handle_dead))
+        // Finally, get user input
+        .with_system(player_input.after(new_room_event))
+}
+
+// Clear dead entities, and run their OnDeath event if they have one
+fn handle_dead(world: &mut World) {
     // Store dead entities
     let mut dead = Vec::<Entity>::new();
+    // Query dead entities, optionally with OnDeath handlers
+    let mut query = world.query::<(Entity, &Health, Option<&OnDeath>)>();
+    // OnDeath events to handler
+    let mut events: Vec<Arc<Mutex<dyn EventHandler>>> = Vec::new();
 
     // Iterate over query results
-    for (entity, health, death_handler) in &query {
+    for (entity, health, event) in query.iter_mut(world) {
         // Entity has died
         if health.0 <= 0 {
             // Add it to the vec of dead entities
             dead.push(entity);
-
-            // Check if the entity has a death handler
-            match death_handler {
-                None => {},
-                // If it does, run it
-                Some(handler) => handler.0(&commands)
+            // Check if the entity has an OnDeath event, if it does, run it
+            match event {
+                Some(event) => events.push(event.get_handler()),
+                None => {}
             }
         }
     }
 
+    // Fire any OnDeath events
+    for event in events {
+        event.lock().unwrap().fire(world);
+    }
+
     // Now remove the dead entities
     dead.iter().for_each(|entity| {
-        commands.entity(*entity).despawn();
+        world.despawn(*entity);
     })
 }
 
 // When the player enters a new room that has an OnEnter
-fn new_room_event(commands: Commands, query: Query<(Option<&OnEnter>, Option<&OnEnterText>), Added<ActiveRoom>>) {
+fn new_room_event(world: &mut World) {
+    // Query for a room that just got ActiveRoom
+    let mut query = SystemState::<Query<Option<&mut OnEnterRoom>, Added<ActiveRoom>>>::new(world);
     // See if there is a new room
-    match query.get_single() {
+    match query.get_mut(world).get_single_mut() {
         // If not, do nothing
         Err(_) => {},
         // If there is a new room, fire the appropriate events (if they're registered)
-        Ok((on_enter, on_enter_text)) => {
+        Ok(on_enter) => {
             // If it has an on_enter event handler, run the handler
             match on_enter {
                 None => {},
-                Some(handler) => handler.0(&commands)
-            };
-            // If it has text, print that text
-            match on_enter_text {
-                None => {},
-                Some(text) => InputManager::println(&text.0)
+                Some(event) => event.get_handler().lock().unwrap().fire(world)
             };
         }
     }
 }
 
-// Manage the room the player is in
-fn handle_active_room(
-    query: Query<&Room, With<ActiveRoom>>,
-    named_entities: Query<(&Name, Option<&OnView>, Option<&OnInteract>), Without<ActiveRoom>>,
-    commands: Commands
-)
+// Get player input & run any needed events
+fn player_input(world: &mut World)
 {
+    // This system's queries
+    let mut active_room_query: SystemState<Query<&Room, With<ActiveRoom>>> = SystemState::new(world); 
+    let mut events_query: SystemState<Query<&OnInteract>> = SystemState::new(world);
+
     // Get the active room
-    let room = query.single();
-    InputManager::println(&room.description);
+    let active_room = active_room_query.get(world);
+
+    // Print the room's description
+    InputManager::println(&active_room.single().description);
+
+    // Prompt the player for input
     let prompt = InputManager::prompt("What do you do?", "Please type a valid action.");
-    match prompt.parse(crate::input_manager::KEYWORDS, named_entities, commands) {
-            Ok(_) => {},
-            Err(_) => prompt.error()
+    // Parse the player's input
+    match prompt.parse_action(crate::input_manager::KEYWORDS, world) {
+        Ok(target) => {
+            // Query events
+            let events = events_query.get(world);
+            // See if the action target has an event
+            match events.get(target) {
+                // Run it if it does
+                Ok(event) => event.get_handler().lock().unwrap().fire(world),
+                Err(_) => {}
+            }
+        },
+        // Print a generic confusion message if the prompt isn't understood
+        Err(_) => prompt.error()
+    }
+}
+
+
+
+// ========== STARTUP SYSTEMS ==========
+
+// Initialize all Events (SystemFunctions must be initialized before use)
+fn init_events(world: &mut World)
+{
+    // Queries for this system
+    let mut state: SystemState<Query<(
+        Option<&OnDeath>,
+        Option<&OnInteract>,
+        Option<&OnEnterRoom>
+    )>> = SystemState::new(world);
+
+    // Events to init
+    let mut events: Vec<Arc<Mutex<dyn EventHandler>>> = Vec::new();
+
+    // Iterate over queried events, push them to events
+    let queries = state.get(world);
+    for (on_death, on_interact, on_enter_room) in queries.into_iter() {
+            if let Some(event) = on_death {
+                events.push(event.get_handler());
+            }
+            if let Some(event) = on_interact {
+                events.push(event.get_handler());
+            }
+            if let Some(event) = on_enter_room {
+                events.push(event.get_handler());
+            }
+        }
+    
+    // Iterate over events and init them (must be done this way because otherwise world is borrowed twice)
+    for event in events {
+        event.lock().unwrap().init(world);
     }
 }
 
 
 
 // ========== CODE CHECKING SYSTEMS ==========
+
 // In development, add some code checks to the app start
 #[cfg(debug_assertions)]
 pub fn build_debug_system_set() -> SystemSet {
@@ -88,6 +167,7 @@ pub fn build_debug_system_set() -> SystemSet {
 }
 
 // Make sure an active room was defined, and make sure only 1 was defined
+#[cfg(debug_assertions)]
 fn active_room_check(query: Query<Option<&ActiveRoom>, With<Room>>) {
     // Count the number of rooms
     let mut active_rooms:i32 = 0;

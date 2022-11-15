@@ -1,31 +1,56 @@
 use bevy::prelude::*;
 use bevy_adventure::prelude::*;
+type Name = bevy_adventure::prelude::Name;
+
+fn door_callback(mut commands: Commands, names: Query<&Name>) {
+    commands.set_room("Room 2".to_string());
+    commands.add(|world: &mut World| {
+        world.spawn(Name("ItWorkedXD".to_string()));
+        println!("Exclusive access to world!");
+    });
+    for name in names.iter() {
+        println!("Name: {}", name.0);
+    }
+    println!("EEE");
+}
 
 fn build_level_one(mut commands: Commands) {
-    let doorway = commands.spawn()
-        .insert(OnInteract(|commands, interaction_type| {
-            commands.set_room("Room 2".to_string());
-            println!("Moved to Room 2 because of interaction {:?}", interaction_type)
-        }))
-        .insert(Name("door".to_owned()))
+    // Random entity in Room 2
+    let example = commands.spawn(
+        Name("EXZAMPLEFSD".to_owned())
+    ).id();
+    // Doorway from Room 1 to Room 2
+    let doorway = commands.spawn(
+        (
+            Name("door".to_owned()),
+            OnInteract::new(IntoSystem::into_system(door_callback))
+        )
+    )
         .id();
 
-    let initial_room = commands.spawn()
-        .insert(Room::new("Room 1", "You're in room 1"))
-        .insert(OnEnterText("You wake up in a cold, dark room.".to_string()))
+    // Room 1
+    let initial_room = commands.spawn(
+        Room {
+            name: "Room 1".to_string(),
+            description: "You're in room 1".to_string()
+        }
+    )
         .insert(ActiveRoom)
         .add_child(doorway)
         .id();
     
-    let room_two = commands.spawn()
-        .insert(Room::new("Room 2", "You're in room 2"))
-        .insert(OnEnterText(
-            "Compared to the last room, this room is much warmer and brighter.".to_string())
-        )
+    // Room 2
+    let room_two = commands.spawn(
+        Room {
+            name: "Room 2".to_string(),
+            description: "You're in room 2".to_string()
+        }
+    )
+        .add_child(example)
         .id();
     
-    commands.spawn()
-        .insert(Level)
+    // Spawn a Level with rooms 1 & 2 inside
+    commands.spawn(Level)
         .add_child(initial_room)
         .add_child(room_two)
     ;

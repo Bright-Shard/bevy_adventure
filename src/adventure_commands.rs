@@ -1,4 +1,4 @@
-use bevy::prelude::{Entity, Commands, With, World};
+use bevy::prelude::*;
 use crate::components::{Room, ActiveRoom};
 
 // Add commands to Bevy's Commands struct
@@ -10,8 +10,14 @@ impl AdventureCommands for Commands<'_, '_> {
     fn set_room(&mut self, new_room: String) {
         self.add(move |world: &mut World| {
             // Remove ActiveRoom for the current room
-            let (entity, _, _) = 
-                world.query::<(Entity, With<Room>, With<ActiveRoom>)>().single_mut(world);
+            let (entity, room, _) = 
+                world.query::<(Entity, &Room, With<ActiveRoom>)>().single_mut(world);
+            // If the active room is also the room we're making active, just return
+            //  (Otherwise the OnRoom event would fire again)
+            if room.name == new_room {
+                return
+            }
+            // Remove ActiveRoom
             world.get_entity_mut(entity).unwrap().remove::<ActiveRoom>();
 
             // Add ActiveRoom for the newly active room
