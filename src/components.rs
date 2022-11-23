@@ -47,3 +47,24 @@ pub struct Level;
 #[derive(Component)]
 pub struct ActiveLevel;
 
+
+
+// ========== EVENTS ==========
+use crate::events::EventHandler;
+use std::sync::{Arc, Mutex};
+use bevy_adventure_derive::Event;
+
+// The event handler each event stores
+type Handler = Arc<Mutex<dyn EventHandler>>;
+
+/// When an entity dies
+#[derive(Component, Event)]
+pub struct OnDeath(pub(crate) Handler);
+
+/// When an entity is interacted with
+#[derive(Component, Event)]
+pub struct OnInteract(pub(crate) Handler);
+
+/// When the player enters a room
+#[derive(Component, Event)]
+pub struct OnEnterRoom(pub(crate) Handler);

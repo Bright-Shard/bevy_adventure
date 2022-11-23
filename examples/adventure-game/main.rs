@@ -3,7 +3,7 @@ use bevy_adventure::prelude::*;
 type Name = bevy_adventure::prelude::Name;
 
 fn door_callback(mut commands: Commands, names: Query<&Name>) {
-    commands.set_room("Room 2".to_string());
+    commands.set_room("Room 2");
     commands.add(|world: &mut World| {
         world.spawn(Name("ItWorkedXD".to_string()));
         println!("Exclusive access to world!");
@@ -21,11 +21,9 @@ fn build_level_one(mut commands: Commands) {
     ).id();
     // Doorway from Room 1 to Room 2
     let doorway = commands.spawn(
-        (
-            Name("door".to_owned()),
-            OnInteract::new(IntoSystem::into_system(door_callback))
+            Name("door".to_owned())
         )
-    )
+        .bind_event::<OnInteract, _>(door_callback)
         .id();
 
     // Room 1

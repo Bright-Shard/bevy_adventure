@@ -12,18 +12,9 @@ pub fn derive_event(target: TokenStream) -> TokenStream {
 
     // Modify the struct & return it
     quote!{
-        impl Event for #name {
-            fn new<Handler: EventHandler, F: IntoEventHandler<Handler = Handler>>(handler: F) -> Self {
-                Self(std::sync::Arc::new(
-                        std::sync::Mutex::new(
-                            <F as IntoEventHandler>::into_event(handler)
-                        )
-                    )
-                )
-            }
-
-            fn get_handler(&self) -> Arc<Mutex<dyn EventHandler>> {
-                self.0.clone()
+        impl crate::events::Event for #name {
+            fn new(handler: std::sync::Arc<std::sync::Mutex<dyn crate::events::EventHandler>>) -> Self {
+                Self(handler)
             }
         }
     }.into()

@@ -2,9 +2,9 @@ mod output;
 mod input;
 mod keywords;
 
-// The InputManager struct
+/// Manage the game's input and output
 // impls are in other files
-pub struct InputManager;
+pub struct IOManager;
 
 // Re-exports
 pub use keywords::{WordType, KEYWORDS};

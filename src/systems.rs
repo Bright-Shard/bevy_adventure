@@ -1,20 +1,26 @@
 use std::sync::{Arc, Mutex};
 
-// Libraries
-use bevy::{prelude::*, ecs::system::SystemState};
-// Local imports
-use crate::{components::*, events::*, InputManager};
-// There's a Name in bevy::prelude and crate::components
+use bevy::ecs::system::SystemState;
+use bevy::prelude::{App, SystemSet, World, Entity, IntoSystemDescriptor, StartupStage, CoreStage, Query, Added, With};
+
+use crate::{
+    components::{Health, ActiveRoom, Room, OnDeath, OnEnterRoom, OnInteract},
+    events::EventHandler,
+    input_output_manager::IOManager
+};
 
 
 
-// ========== ADD SYSTEMS ==========
+// ========== ADD SYSTEMS TO APP ==========
 
 pub fn append_systems(app: &mut App) {
     // Init events at startup
     app.add_startup_system_to_stage(StartupStage::PostStartup, init_events);
     // All the other systems
     app.add_system_set_to_stage(CoreStage::PreUpdate, build_system_set());
+    // In development, add code-checking systems
+    #[cfg(debug_assertions)]
+    app.add_startup_system_set_to_stage(StartupStage::PostStartup, build_debug_system_set());
 }
 
 
@@ -42,23 +48,28 @@ fn handle_dead(world: &mut World) {
     let mut events: Vec<Arc<Mutex<dyn EventHandler>>> = Vec::new();
 
     // Iterate over query results
-    for (entity, health, event) in query.iter_mut(world) {
+    for (entity, health, event) in query.iter(world) {
         // Entity has died
         if health.0 <= 0 {
             // Add it to the vec of dead entities
             dead.push(entity);
             // Check if the entity has an OnDeath event, if it does, run it
             match event {
-                Some(event) => events.push(event.get_handler()),
+                Some(event) => events.push(event.0.clone()),
                 None => {}
             }
         }
     }
 
     // Fire any OnDeath events
-    for event in events {
-        event.lock().unwrap().fire(world);
+    for event in events.iter_mut() {
+        event
+            .lock()
+            .unwrap()
+            .fire(world);
     }
+
+    // Now run any on_death events
 
     // Now remove the dead entities
     dead.iter().for_each(|entity| {
@@ -69,9 +80,9 @@ fn handle_dead(world: &mut World) {
 // When the player enters a new room that has an OnEnter
 fn new_room_event(world: &mut World) {
     // Query for a room that just got ActiveRoom
-    let mut query = SystemState::<Query<Option<&mut OnEnterRoom>, Added<ActiveRoom>>>::new(world);
+    let mut query = SystemState::<Query<Option<&OnEnterRoom>, Added<ActiveRoom>>>::new(world);
     // See if there is a new room
-    match query.get_mut(world).get_single_mut() {
+    match query.get_mut(world).get_single() {
         // If not, do nothing
         Err(_) => {},
         // If there is a new room, fire the appropriate events (if they're registered)
@@ -79,7 +90,7 @@ fn new_room_event(world: &mut World) {
             // If it has an on_enter event handler, run the handler
             match on_enter {
                 None => {},
-                Some(event) => event.get_handler().lock().unwrap().fire(world)
+                Some(event) => event.0.clone().lock().unwrap().fire(world)
             };
         }
     }
@@ -89,27 +100,27 @@ fn new_room_event(world: &mut World) {
 fn player_input(world: &mut World)
 {
     // This system's queries
-    let mut active_room_query: SystemState<Query<&Room, With<ActiveRoom>>> = SystemState::new(world); 
-    let mut events_query: SystemState<Query<&OnInteract>> = SystemState::new(world);
+    let mut active_room_query: SystemState<Query<&Room, With<ActiveRoom>>> = SystemState::new(world);
 
     // Get the active room
     let active_room = active_room_query.get(world);
 
     // Print the room's description
-    InputManager::println(&active_room.single().description);
+    IOManager::println(&active_room.single().description);
 
     // Prompt the player for input
-    let prompt = InputManager::prompt("What do you do?", "Please type a valid action.");
+    let prompt = IOManager::prompt("What do you do?", "Please type a valid action.");
     // Parse the player's input
-    match prompt.parse_action(crate::input_manager::KEYWORDS, world) {
+    match prompt.parse_action(crate::input_output_manager::KEYWORDS, world) {
         Ok(target) => {
-            // Query events
-            let events = events_query.get(world);
+            // Get an EntityMut so we can see the target's components
+            let target_mut = world.entity(target);
+            
             // See if the action target has an event
-            match events.get(target) {
+            match target_mut.get::<OnInteract>() {
                 // Run it if it does
-                Ok(event) => event.get_handler().lock().unwrap().fire(world),
-                Err(_) => {}
+                Some(event) => event.0.clone().lock().unwrap().fire(world),
+                None => {}
             }
         },
         // Print a generic confusion message if the prompt isn't understood
@@ -136,20 +147,20 @@ fn init_events(world: &mut World)
 
     // Iterate over queried events, push them to events
     let queries = state.get(world);
-    for (on_death, on_interact, on_enter_room) in queries.into_iter() {
+    for (on_death, on_interact, on_enter_room) in queries.iter() {
             if let Some(event) = on_death {
-                events.push(event.get_handler());
+                events.push(event.0.clone());
             }
             if let Some(event) = on_interact {
-                events.push(event.get_handler());
+                events.push(event.0.clone());
             }
             if let Some(event) = on_enter_room {
-                events.push(event.get_handler());
+                events.push(event.0.clone());
             }
         }
     
     // Iterate over events and init them (must be done this way because otherwise world is borrowed twice)
-    for event in events {
+    for event in events.iter_mut() {
         event.lock().unwrap().init(world);
     }
 }

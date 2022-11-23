@@ -1,64 +1,29 @@
-// Local files
-mod input_manager;
-mod systems;
-mod components;
-mod events;
+// ========== MOD LOCAL FILES ==========
+/// Input & Output manager struct
+pub mod input_output_manager;
+/// The systems built-in to bevy_adventure
+pub mod systems;
+/// Entity components built-in to bevy_adventure
+pub mod components;
+/// The events built-in to bevy_adventure & their traits
+pub mod events;
+/// The actual bevy_adventure plugin
+pub mod plugin;
+/// A trait to modify Bevy's Commands
 mod adventure_commands;
 
-// Exports
+// ========== Exports/Modules ==========
+
+/// Everything needed to use bevy_adventure. Import this when using the library
 pub mod prelude {
-    pub use crate::input_manager::{InputManager, WordType};
+    // Input manager
+    pub use crate::input_output_manager::{IOManager, WordType, KEYWORDS};
+    // Built in components
     pub use crate::components::*;
-    pub use crate::events::*;
-    pub use crate::adventure_commands::AdventureCommands;
-    pub use crate::AdventurePlugin;
-}
-pub use input_manager::InputManager;
-pub use components::*;
-pub use events::*;
-
-// Imports from local files
-
-// Libraries
-use bevy::prelude::*;
-use bevy::app::PluginGroupBuilder;
-
-// Additional plugins for an adventure game
-// Core ones are added by the MinimalPlugins plugins group
-struct AdventureDefaultPlugins;
-impl PluginGroup for AdventureDefaultPlugins {
-    fn build(self) -> PluginGroupBuilder {
-        PluginGroupBuilder::start::<Self>()
-            // Hierarchy for objects in the game
-            .add(bevy::hierarchy::HierarchyPlugin::default())
-            // Player input
-            .add(bevy::input::InputPlugin::default())
-    }
-
-    fn name() -> String {
-        return String::from("BevyAdventurePlugins")
-    }
-}
-
-// The Bevy plugin
-pub struct AdventurePlugin;
-impl Plugin for AdventurePlugin {
-    fn build (&self, app: &mut App) {
-        // In development, add a code-checking system
-        #[cfg(debug_assertions)]
-        app.add_startup_system_set_to_stage(
-            StartupStage::PostStartup,
-            systems::build_debug_system_set()
-        );
-        
-        // Add plugins
-        app
-            // Core Bevy plugins
-            .add_plugins(MinimalPlugins)
-            // Other plugins needed for adventure games
-            .add_plugins(AdventureDefaultPlugins);
-        
-        // Add systems
-        systems::append_systems(app);
-    }
+    // Trait modifying Bevy's Commands struct
+    pub use crate::adventure_commands::{AdventureCommands, AdventureEntityCommands};
+    // The plugin itself
+    pub use crate::plugin::AdventurePlugin;
+    // Event trait so `Event::new()` can be used
+    pub use crate::events::Event;
 }

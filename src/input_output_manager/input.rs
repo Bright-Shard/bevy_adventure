@@ -1,11 +1,11 @@
-use crate::{InputManager, ActiveRoom};
+use super::IOManager;
 use std::{str::FromStr, io::{stdout, stdin, Write}};
 use core::any::TypeId;
 
 use bevy::{prelude::{Query, Entity, Children, HierarchyQueryExt, World, With}, ecs::system::SystemState};
 
-use crate::input_manager::keywords::WordType;
-use crate::components::Name;
+use crate::input_output_manager::keywords::WordType;
+use crate::components::{Name, ActiveRoom};
 
 // Errors when parsing input
 pub enum ParseError {
@@ -100,7 +100,7 @@ impl Input <i32> {
 }
 
 // Input from player
-impl InputManager {
+impl IOManager {
     pub fn prompt <T: FromStr + 'static> (prompt: &str, error_msg: &str) -> Input<T> {
         // Prompt the player for input, as long as the prompt isn't blank
         if prompt != "" {

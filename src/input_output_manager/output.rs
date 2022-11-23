@@ -1,10 +1,10 @@
-use crate::InputManager;
+use super::IOManager;
 use std::{thread, time, fmt::Display, process::Command, io::{stdout, Write}};
 
 const DEFAULT_DELAY: u64 = 35;
 
 // Output to player
-impl InputManager {
+impl IOManager {
     // For printing one line with no newline at the end
     pub fn print <F: ToString> (text: F) {
         // Print each character one at a time
