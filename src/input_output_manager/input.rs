@@ -1,29 +1,37 @@
 use super::IOManager;
-use std::{str::FromStr, io::{stdout, stdin, Write}};
 use core::any::TypeId;
+use std::{
+    io::{stdin, stdout, Write},
+    str::FromStr,
+};
 
-use bevy::{prelude::{Query, Entity, Children, HierarchyQueryExt, World, With}, ecs::system::SystemState};
+use bevy::{
+    ecs::system::SystemState,
+    prelude::{Children, Entity, HierarchyQueryExt, Query, With, World},
+};
 
+use crate::components::{ActiveRoom, Name};
 use crate::input_output_manager::keywords::WordType;
-use crate::components::{Name, ActiveRoom};
+
+type ActiveRoomQuery<'world, 'state> = Query<'world, 'state, Entity, With<ActiveRoom>>;
 
 // Errors when parsing input
+#[derive(Debug)]
 pub enum ParseError {
-    NoRegisteredEvent,
     NoTarget,
-    NoAction
+    NoAction,
 }
 
 // The returned user input
-pub struct Input <T: FromStr> {
+pub struct Input<T: FromStr> {
     value: T,
-    error_msg: String
+    error_msg: String,
 }
-impl <T: FromStr> Input <T> {
+impl<T: FromStr> Input<T> {
     pub fn new(value: T, error_msg: &str) -> Self {
         Self {
             value,
-            error_msg: error_msg.to_string()
+            error_msg: error_msg.to_string(),
         }
     }
 
@@ -39,22 +47,23 @@ impl <T: FromStr> Input <T> {
         println!("{}", self.error_msg);
     }
 }
-impl Input <String> {
+impl Input<String> {
     // Gets the target and action, then runs appropriate handlers
-    pub fn parse_action(&self, keywords: phf::Map<&'static str, WordType>, world: &mut World) -> Result<Entity, ParseError> {
-
+    pub fn parse(
+        &self,
+        keywords: phf::Map<&'static str, WordType>,
+        world: &mut World,
+    ) -> Result<Entity, ParseError> {
         // This system's queries
-        let mut state: SystemState<(
-            Query<&Children>,
-            Query<Entity, With<ActiveRoom>>,
-            Query<&Name>
-        )> = SystemState::new(world);
+        let mut state: SystemState<(Query<&Children>, ActiveRoomQuery, Query<&Name>)> =
+            SystemState::new(world);
+
         let (children, active_room, names) = state.get(world);
 
         let split = self.value.split_whitespace();
 
         let mut potential_targets = Vec::new();
-        let mut action = WordType::Ignore;
+        let mut action: Option<WordType> = None;
 
         // Iterate through words and see if they are keywords or not
         split.for_each(|word| {
@@ -64,46 +73,50 @@ impl Input <String> {
                 // If it is a keyword,
                 Some(word_type) => match word_type {
                     // Either ignore it
-                    WordType::Ignore => {},
+                    WordType::Ignore => {}
                     // Or set it as the action.
-                    _ => action = word_type.clone()
-                }
+                    _ => {
+                        if action.is_none() {
+                            action = Some(word_type.clone());
+                        }
+                    }
+                },
             }
         });
 
         // If an action type wasn't identified, error out
-        if let WordType::Ignore = action {
+        if action.is_none() {
             return Err(ParseError::NoAction);
         }
 
         // Try and get the target of the action
         // Iterate through the active children
-        for child in children.iter_descendants(active_room.get_single().unwrap()) {
-            // See if the child has a name
-            match names.get(child) {
-                Ok(name) => {
-                    // If it does, see if that name is in potential_targets
-                    if potential_targets.iter().any(|test_name| *test_name == &name.0) {
-                        // We've found the target!
-                        return Ok(child);
-                    }
-                },
-                Err(_) => {}
-            }
-        }
+        let target = children
+            .iter_descendants(active_room.get_single().unwrap())
+            .find(|child| {
+                if let Ok(name) = names.get(*child) {
+                    potential_targets
+                        .iter()
+                        .any(|test_name| *test_name == name.0)
+                } else {
+                    false
+                }
+            });
 
-        // If we haven't identified the target already, error that it wasn't found
-        Err(ParseError::NoTarget)
+        // Return the target, or error that no target was found
+        match target {
+            None => Err(ParseError::NoTarget),
+            Some(target_entity) => Ok(target_entity),
+        }
     }
 }
-impl Input <i32> {
-}
+impl Input<i32> {}
 
 // Input from player
 impl IOManager {
-    pub fn prompt <T: FromStr + 'static> (prompt: &str, error_msg: &str) -> Input<T> {
+    pub fn prompt<T: FromStr + 'static>(prompt: &str, error_msg: &str) -> Input<T> {
         // Prompt the player for input, as long as the prompt isn't blank
-        if prompt != "" {
+        if !prompt.is_empty() {
             Self::println(prompt);
         }
 
@@ -128,7 +141,7 @@ impl IOManager {
             // Make a prompt
             print!("{}", prompt);
             stdout().flush().expect("Error flushing stdout!");
-        
+
             // For storing the player input
             let mut input = String::new();
 
@@ -139,7 +152,7 @@ impl IOManager {
             match input.trim().parse::<T>() {
                 // If it is, return an Input of it
                 Ok(value) => break Input::new(value, error_msg),
-                Err(_) => Self::println(error_msg)
+                Err(_) => Self::println(error_msg),
             }
         }
     }
@@ -149,16 +162,14 @@ impl IOManager {
         // A new vec holding the options, so we can modify them
         let mut options = Vec::<String>::new();
         // Add a number before each option (1., 2., etc)
-        raw_options
-            .iter()
-            .fold(1, |index, option| {
-                // Push the number of the option & the option text to options
-                options.push(format!("{}. {}", index, option));
+        raw_options.iter().fold(1, |index, option| {
+            // Push the number of the option & the option text to options
+            options.push(format!("{}. {}", index, option));
 
-                // Increase the counter, so the next option's number is 1 higher
-                return index + 1;
-            });
-        
+            // Increase the counter, so the next option's number is 1 higher
+            index + 1
+        });
+
         // Print the prompt
         println!("{}", prompt);
         // Print the choices
@@ -167,15 +178,13 @@ impl IOManager {
         // Loop getting player input until they choose a valid option, then return it
         loop {
             // Get player input
-            let input = Self::prompt::<i32>(
-                "Choose 1",
-                "Please type the number of the option you want."
-            );
+            let input =
+                Self::prompt::<i32>("Choose 1", "Please type the number of the option you want.");
 
             // Now make sure the input is actually one of the options we printed
             match raw_options.get((input.get() - 1) as usize) {
                 Some(choice) => break String::from(*choice),
-                None => Self::println("Please choose an option that was printed.")
+                None => Self::println("Please choose an option that was printed."),
             }
         }
     }

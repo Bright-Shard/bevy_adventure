@@ -1,12 +1,17 @@
 use super::IOManager;
-use std::{thread, time, fmt::Display, process::Command, io::{stdout, Write}};
+use std::{
+    fmt::Display,
+    io::{stdout, Write},
+    process::Command,
+    thread, time,
+};
 
 const DEFAULT_DELAY: u64 = 35;
 
 // Output to player
 impl IOManager {
     // For printing one line with no newline at the end
-    pub fn print <F: ToString> (text: F) {
+    pub fn print<F: ToString>(text: F) {
         // Print each character one at a time
         text.to_string().chars().for_each(|char| {
             print!("{}", char);
@@ -17,12 +22,12 @@ impl IOManager {
         });
     }
     // For printing one line with a newline at the end
-    pub fn println <F: ToString> (text: F) {
+    pub fn println<F: ToString>(text: F) {
         Self::print(text);
-        println!("");
+        println!();
     }
     // For printing multiple line
-    pub fn printlns <F: Display> (text: Vec<F>) {
+    pub fn printlns<F: Display>(text: Vec<F>) {
         // Print each line one at a time
         text.into_iter().for_each(|line| {
             // Print the line

@@ -1,3 +1,11 @@
+// ========== DOCUMENTATION ==========
+
+//! # Bevy Adventure
+//! A Bevy plugin for making text-based adventure games.
+//! For examples, see the examples directory on my GitHub repo.
+
+
+
 // ========== MOD LOCAL FILES ==========
 /// Input & Output manager struct
 pub mod input_output_manager;
@@ -9,12 +17,14 @@ pub mod components;
 pub mod events;
 /// The actual bevy_adventure plugin
 pub mod plugin;
-/// A trait to modify Bevy's Commands
-mod adventure_commands;
+/// A trait to modify Bevy's Commands struct
+pub mod adventure_commands;
+
+
 
 // ========== Exports/Modules ==========
 
-/// Everything needed to use bevy_adventure. Import this when using the library
+/// Everything needed to use bevy_adventure. Import this when using the library.
 pub mod prelude {
     // Input manager
     pub use crate::input_output_manager::{IOManager, WordType, KEYWORDS};
