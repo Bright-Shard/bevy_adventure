@@ -2,25 +2,23 @@
 
 //! # Bevy Adventure
 //! A Bevy plugin for making text-based adventure games.
-//! For examples, see the examples directory on my GitHub repo.
-
-
+//! For examples, see the
+//! [examples directory](https://github.com/Bright-Shard/bevy_adventure/tree/master/examples)
+//! on my GitHub repo.
 
 // ========== MOD LOCAL FILES ==========
-/// Input & Output manager struct
-pub mod input_output_manager;
-/// The systems built-in to bevy_adventure
-pub mod systems;
+/// Add methods to Bevy's [Commands] and [EntityCommands] structs
+pub mod adventure_commands;
 /// Entity components built-in to bevy_adventure
 pub mod components;
 /// The events built-in to bevy_adventure & their traits
 pub mod events;
+/// Input & Output manager struct
+pub mod input_output_manager;
 /// The actual bevy_adventure plugin
 pub mod plugin;
-/// A trait to modify Bevy's Commands struct
-pub mod adventure_commands;
-
-
+/// The systems built-in to bevy_adventure
+pub mod systems;
 
 // ========== Exports/Modules ==========
 

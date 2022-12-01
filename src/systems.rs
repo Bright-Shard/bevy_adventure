@@ -14,6 +14,7 @@ use crate::{
 
 // ========== ADD SYSTEMS TO APP ==========
 
+/// Appends all of bevy_adventure's systems to the app
 pub fn append_systems(app: &mut App) {
     // Init events at startup
     app.add_startup_system_to_stage(StartupStage::PostStartup, init_events);
@@ -163,7 +164,7 @@ fn init_events(world: &mut World) {
 
 // In development, add some code checks to the app start
 #[cfg(debug_assertions)]
-pub fn build_debug_system_set() -> SystemSet {
+fn build_debug_system_set() -> SystemSet {
     SystemSet::new()
         //.with_system(room_checks)
         .with_system(active_room_check)

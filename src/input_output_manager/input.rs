@@ -15,7 +15,7 @@ use crate::input_output_manager::keywords::WordType;
 
 type ActiveRoomQuery<'world, 'state> = Query<'world, 'state, Entity, With<ActiveRoom>>;
 
-// Errors when parsing input
+/// Errors when parsing user input
 #[derive(Debug)]
 pub enum ParseError {
     NoTarget,

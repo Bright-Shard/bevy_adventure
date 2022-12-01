@@ -1,7 +1,7 @@
 use phf::phf_map;
 
-#[derive(Debug)]
-#[derive(Clone)]
+/// The type of action detected from different keywords.
+#[derive(Debug, Clone)]
 pub enum WordType {
     Look,
     Take,
@@ -11,7 +11,7 @@ pub enum WordType {
     Break,
     Move,
     Ignore,
-    PotentialTarget
+    PotentialTarget,
 }
 
 pub const KEYWORDS: phf::Map<&'static str, WordType> = phf_map! {

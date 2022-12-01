@@ -3,7 +3,7 @@ use bevy::app::{App, Plugin, PluginGroup, PluginGroupBuilder};
 use bevy::prelude::MinimalPlugins;
 
 /// Plugins needed by bevy_adventure.
-struct AdventureDefaultPlugins;
+pub struct AdventureDefaultPlugins;
 impl PluginGroup for AdventureDefaultPlugins {
     fn build(self) -> PluginGroupBuilder {
         PluginGroupBuilder::start::<Self>()

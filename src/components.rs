@@ -2,7 +2,10 @@ use bevy::prelude::Component;
 
 // ========== ENTITY COMPONENTS ==========
 
-// Entity health
+/// Entity health component
+///
+/// bevy_adventure will check this component to
+/// see if any entities have died.
 #[derive(Component)]
 pub struct Health(pub i32);
 
@@ -18,41 +21,39 @@ impl Health {
     }
 }
 
-// For naming entities
+/// For naming entities
 #[derive(Component)]
 pub struct Name(pub String);
 
-// For giving entities descriptions
+/// For giving entities descriptions
 #[derive(Component)]
 pub struct Description(pub String);
 
 // ========== LEVEL COMPONENTS ==========
 
-// A room in the game
+/// A room in the game
 #[derive(Component)]
 pub struct Room {
     pub name: String,
-    pub description: String
+    pub description: String,
 }
 
-// The currently active room
+/// The currently active room
 #[derive(Component)]
 pub struct ActiveRoom;
 
-// A level in the game
+/// A level in the game
 #[derive(Component)]
 pub struct Level;
 
-// The currently active level
+/// The currently active level
 #[derive(Component)]
 pub struct ActiveLevel;
 
-
-
 // ========== EVENTS ==========
 use crate::events::EventHandler;
-use std::sync::{Arc, Mutex};
 use bevy_adventure_derive::Event;
+use std::sync::{Arc, Mutex};
 
 // The event handler each event stores
 type Handler = Arc<Mutex<dyn EventHandler>>;
