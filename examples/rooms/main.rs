@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use bevy_adventure::prelude::*;
 
 fn door_callback(mut commands: Commands, current_room: Query<&Room, With<ActiveRoom>>) {
-    match current_room.single().name.as_str() {
+    match current_room.single().name {
         "Room 1" => commands.set_room("Room 2"),
         "Room 2" => commands.set_room("Room 1"),
         _ => panic!("Door opened from room that isn't Room 1 or Room 2"),
@@ -12,8 +12,8 @@ fn door_callback(mut commands: Commands, current_room: Query<&Room, With<ActiveR
 fn build_level_one(mut commands: Commands) {
     // Doorway from Room 1 to Room 2
     let doorway = commands
-        .spawn(Name("door".to_owned()))
-        .bind_event::<OnInteract, _>(door_callback)
+        .spawn(Name("door"))
+        .on_interact(WordType::Any, door_callback)
         .id();
     // Doorway from Room 2 to Room 1
     let doorway_two = doorway;
@@ -21,8 +21,8 @@ fn build_level_one(mut commands: Commands) {
     // Room 1
     let initial_room = commands
         .spawn(Room {
-            name: "Room 1".to_string(),
-            description: "You're in room 1".to_string(),
+            name: "Room 1",
+            description: Some("You're in room 1"),
         })
         .insert(ActiveRoom)
         .add_child(doorway)
@@ -31,8 +31,8 @@ fn build_level_one(mut commands: Commands) {
     // Room 2
     let room_two = commands
         .spawn(Room {
-            name: "Room 2".to_string(),
-            description: "You're in room 2".to_string(),
+            name: "Room 2",
+            description: Some("You're in room 2"),
         })
         .add_child(doorway_two)
         .id();

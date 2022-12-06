@@ -1,4 +1,6 @@
-use crate::components::{ActiveRoom, Room};
+use crate::components::{ActiveRoom, OnDeath, OnEnterRoom, OnInteract, Room};
+use crate::input_output_manager::WordType;
+use bevy::app::AppExit;
 use bevy::ecs::system::EntityCommands;
 use bevy::prelude::{Commands, Entity, With, World};
 
@@ -13,6 +15,8 @@ pub trait AdventureCommands {
     /// [rooms example](https://github.com/Bright-Shard/bevy_adventure/tree/master/examples/rooms)
     /// for an example on how to use this.
     fn set_room(&mut self, room: &str);
+    /// Send the [AppExit] event, and quit the game.
+    fn quit_game(&mut self) -> &mut Self;
 }
 impl AdventureCommands for Commands<'_, '_> {
     fn set_room(&mut self, new_room: &str) {
@@ -50,15 +54,21 @@ impl AdventureCommands for Commands<'_, '_> {
             };
         });
     }
+
+    fn quit_game(&mut self) -> &mut Self {
+        self.add(|world: &mut World| {
+            world.send_event(AppExit);
+        });
+        self
+    }
 }
 
 /// Modify Bevy's EntityCommands struct
-use crate::events::{Event, IntoEventHandler};
-use bevy::prelude::Component;
+use crate::events::IntoEventHandler;
 
 /// Adds methods to Bevy's [EntityCommands] struct
 pub trait AdventureEntityCommands {
-    /// Bind an event to an entity. This is effectively a shortcut for `.insert(<EventType>::new(<EventHandler>.into_event()))`.
+    /// Bind an interaction event to an entity. This is effectively a shortcut for `.insert(OnInteract(<WordType>, <EventHandler>.into_event()))`.
     ///
     /// Example:
     /// ```
@@ -70,23 +80,50 @@ pub trait AdventureEntityCommands {
     ///     // The first generic is the event type, and the second is Params
     ///     // Don't worry about the second generic too much, it's just Bevy magic.
     ///     // Just put a `_` to make Rust autodetect it.
-    ///     .bind_event::<OnInteract, _>(|mut commands: Commands|{
+    ///     .bind_event(WordType::Any, |mut commands: Commands|{
     ///         // Change the active room to the second room
     ///         commands.set_room("Room 2");
     ///     })
     ///     // Return the Entity to store in the doorway variable
     ///     .id();
     /// ```
-    fn bind_event<EventType: Event + Component, Params>(
+    fn on_interact<Params>(
         &mut self,
+        word_type: WordType,
         handler: impl IntoEventHandler<Params>,
     ) -> &mut Self;
+    /// The same as above, but instead binds an on death event to an entity.
+    fn on_death<Params>(&mut self, handler: impl IntoEventHandler<Params>) -> &mut Self;
+    /// The same as above, but instead binds an on enter event to an entity.
+    fn on_enter_room<Params>(&mut self, handler: impl IntoEventHandler<Params>) -> &mut Self;
 }
+
 impl AdventureEntityCommands for EntityCommands<'_, '_, '_> {
-    fn bind_event<EventType: Event + Component, Params>(
+    fn on_interact<Params>(
         &mut self,
+        word_type: WordType,
         handler: impl IntoEventHandler<Params>,
     ) -> &mut Self {
-        self.insert(EventType::new(handler.into_event()))
+        let entity = self.id();
+        let commands = self.commands();
+        commands.add(move |world: &mut World| {
+            let mut entity = world.entity_mut(entity);
+            if let Some(mut on_interact) = entity.get_mut::<OnInteract>() {
+                on_interact.0.insert(word_type, handler.into_event());
+            } else {
+                let mut hashmap = bevy::utils::HashMap::new();
+                hashmap.insert(word_type, handler.into_event());
+                entity.insert(OnInteract(hashmap));
+            }
+        });
+        self
+    }
+
+    fn on_death<Params>(&mut self, handler: impl IntoEventHandler<Params>) -> &mut Self {
+        self.insert(OnDeath(handler.into_event()))
+    }
+
+    fn on_enter_room<Params>(&mut self, handler: impl IntoEventHandler<Params>) -> &mut Self {
+        self.insert(OnEnterRoom(handler.into_event()))
     }
 }

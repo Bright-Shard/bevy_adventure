@@ -2,14 +2,15 @@ use std::sync::{Arc, Mutex};
 
 use bevy::ecs::system::SystemState;
 use bevy::prelude::{
-    Added, App, CoreStage, Entity, IntoSystemDescriptor, Query, StartupStage, SystemSet, With,
-    World,
+    Added, App, Children, CoreStage, Entity, EventReader, HierarchyQueryExt, IntoSystemDescriptor,
+    Mut, Query, Res, ResMut, Resource, StartupStage, SystemSet, With, World,
 };
 
+use crate::components::{Aliases, Name};
 use crate::{
     components::{ActiveRoom, Health, OnDeath, OnEnterRoom, OnInteract, Room},
     events::EventHandler,
-    input_output_manager::{IOManager, ParseError},
+    input_output_manager::{IOManager, WordType, KEYWORDS},
 };
 
 // ========== ADD SYSTEMS TO APP ==========
@@ -18,6 +19,8 @@ use crate::{
 pub fn append_systems(app: &mut App) {
     // Init events at startup
     app.add_startup_system_to_stage(StartupStage::PostStartup, init_events);
+    // A generic system listening for Bevy's exit
+    app.add_system(on_exit);
     // All the other systems
     app.add_system_set_to_stage(CoreStage::PreUpdate, build_system_set());
     // In development, add code-checking systems
@@ -65,66 +68,174 @@ fn handle_dead(world: &mut World) {
         event.lock().unwrap().fire(world);
     }
 
-    // Now run any on_death events
-
     // Now remove the dead entities
     dead.iter().for_each(|entity| {
         world.despawn(*entity);
     })
 }
 
-// When the player enters a new room that has an OnEnter
-fn new_room_event(world: &mut World) {
-    // Query for a room that just got ActiveRoom
-    let mut query = SystemState::<Query<Option<&OnEnterRoom>, Added<ActiveRoom>>>::new(world);
-    // See if there is a new room
-    match query.get_mut(world).get_single() {
-        // If not, do nothing
-        Err(_) => {}
-        // If there is a new room, fire the appropriate events (if they're registered)
-        Ok(on_enter) => {
-            // If it has an on_enter event handler, run the handler
-            match on_enter {
-                None => {}
-                Some(event) => event.0.clone().lock().unwrap().fire(world),
-            };
-        }
+// SystemState caching for new_room_event
+type NewRoomQuery<'a> = Query<'static, 'static, Option<&'a OnEnterRoom>, Added<ActiveRoom>>;
+#[derive(Resource)]
+pub struct NewRoomState(SystemState<(NewRoomQuery<'static>, ResMut<'static, IOManager>)>);
+impl NewRoomState {
+    pub fn new(world: &mut World) -> Self {
+        Self(SystemState::new(world))
     }
 }
 
-// Get player input & run any needed events
-fn player_input(world: &mut World) {
-    // This system's queries
-    let mut active_room_query: SystemState<Query<&Room, With<ActiveRoom>>> =
-        SystemState::new(world);
+// When the player enters a new room that has an OnEnterRoom handler
+fn new_room_event(world: &mut World) {
+    // Get our cached SystemState
+    world.resource_scope(|world, mut state: Mut<NewRoomState>| {
+        // Get our query
+        let (query, mut iomgr) = state.0.get_mut(world);
+        // Event, if it exists
+        let mut event = None;
 
-    // Get the active room
-    let active_room = active_room_query.get(world);
-
-    // Print the room's description
-    IOManager::println(&active_room.single().description);
-
-    // Prompt the player for input
-    let prompt = IOManager::prompt("What do you do?", "Please type a valid action.");
-    // Parse the player's input
-    match prompt.parse(crate::input_output_manager::KEYWORDS, world) {
-        Ok(target) => {
-            // Get an EntityMut so we can see the target's components
-            let target_mut = world.entity(target);
-
-            // See if the action target has an event
-            if let Some(event) = target_mut.get::<OnInteract>() {
-                event.0.clone().lock().unwrap().fire(world);
-            } else {
-                // If it doesn't, print a generic confusion message
-                IOManager::println("You can't do that with");
+        // See if there is a new room
+        match query.get_single() {
+            // If not, do nothing
+            Err(_) => {}
+            // If there is a new room, fire the appropriate events (if they're registered)
+            Ok(on_enter) => {
+                // If it has an on_enter event handler, run the handler
+                if let Some(handler) = on_enter {
+                    event = Some(handler.0.clone());
+                }
+                // Also disable AutoPrompt so it's only on if set manually
+                iomgr.autoprompt = false;
             }
         }
-        // Print a generic confusion message if the prompt isn't understood
-        Err(err) => match err {
-            ParseError::NoAction => IOManager::println("I don't understand that action."),
-            ParseError::NoTarget => IOManager::println("That's not an object"),
-        },
+
+        // If there was an event handler, fire it
+        if let Some(handler) = event {
+            handler.lock().unwrap().fire(world);
+        }
+    });
+}
+
+// An event listener, so when bevy exits we can re-enable the terminal cursor
+fn on_exit(exit: EventReader<bevy::app::AppExit>, mut iomgr: ResMut<IOManager>) {
+    if !exit.is_empty() {
+        iomgr.show_cursor();
+    }
+}
+
+// Player autoprompt
+fn player_input(world: &mut World) {
+    // Query types
+    type ActiveRoomQuery<'world, 'state, 'a> =
+        Query<'world, 'state, (Entity, &'a Room), With<ActiveRoom>>;
+    type ChildrenQuery<'world, 'state, 'a> = Query<'world, 'state, &'a Children>;
+    type NameQuery<'world, 'state, 'a> = Query<'world, 'state, (&'a Name, Option<&'a Aliases>)>;
+    type IOManagerResource<'w> = Res<'w, IOManager>;
+
+    // This system's queries
+    let mut active_room_query: SystemState<(
+        ActiveRoomQuery,
+        ChildrenQuery,
+        NameQuery,
+        IOManagerResource,
+    )> = SystemState::new(world);
+
+    // Get queries
+    let (active_room_query, children, names, iomgr) = active_room_query.get(world);
+
+    // If AutoPrompt is disabled, return
+    if !iomgr.autoprompt {
+        return;
+    }
+
+    let (active_room_entity, active_room) = active_room_query.single();
+
+    // Print the room's description
+    if let Some(desc) = &active_room.description {
+        iomgr.println(desc);
+    }
+
+    // Prompt the player for input
+    let input = iomgr.prompt_raw("What do you do?");
+
+    // Parse the input
+    let split = input.split_whitespace();
+
+    let mut potential_targets = Vec::new();
+    let mut action: Option<WordType> = None;
+
+    // Iterate through words and see if they are keywords or not
+    split.for_each(|word| {
+        match KEYWORDS.get(&word.to_lowercase()) {
+            // If it isn't a keyword, it might be a target
+            None => potential_targets.push(word),
+            // If it is a keyword,
+            Some(word_type) => match word_type {
+                // Either ignore it
+                WordType::Ignore => {}
+                // Or set it as the action.
+                _ => {
+                    if action.is_none() {
+                        action = Some(word_type.clone());
+                    }
+                }
+            },
+        }
+    });
+
+    // Try and get the target of the action
+    // Iterate through the active children
+    let mut target = children.iter_descendants(active_room_entity).find(|child| {
+        if let Ok((name, aliases)) = names.get(*child) {
+            // Iterate through potential targets
+            potential_targets
+                .iter()
+                // See if any of the potential targets match this entity's name
+                .any(|test_name| {
+                    // Also see if the entity has aliases to check
+                    if let Some(alias_list) = aliases {
+                        (alias_list.0.contains(test_name)) || (*test_name == name.0)
+                    } else {
+                        // If not, just check the entity name
+                        *test_name == name.0
+                    }
+                })
+        } else {
+            false
+        }
+    });
+
+    // If we haven't identified the target already, fall back to the room
+    if target.is_none() {
+        target = Some(active_room_entity);
+    }
+
+    // Act upon the player's input
+    // Get an EntityMut so we can see the target's components
+    let target_mut = world.entity(target.unwrap());
+
+    // See if the action target has an event
+    if let Some(event) = target_mut.get::<OnInteract>() {
+        // If it does, see if an action was identified
+        if let Some(action_type) = action {
+            // If we have an OnInteract even and action, make sure their types match
+            if let Some(handler) = event.0.get(&action_type) {
+                handler.clone().lock().unwrap().fire(world);
+            // WordType::Any is always a fallback
+            } else if let Some(handler) = event.0.get(&WordType::Any) {
+                handler.clone().lock().unwrap().fire(world);
+            }
+        } else {
+            // If an action wasn't identified, see if the target has a handler for WordType::Any
+            if let Some(handler) = event.0.get(&WordType::Any) {
+                handler.clone().lock().unwrap().fire(world);
+            } else {
+                // If there isn't one, just error out
+                iomgr.println("I don't understand that action.");
+            }
+        }
+    } else {
+        // If it doesn't, print a generic confusion message
+        iomgr.println("Sorry, that action is confusing.");
     }
 }
 
@@ -132,10 +243,14 @@ fn player_input(world: &mut World) {
 
 // Initialize all Events (SystemFunctions must be initialized before use)
 fn init_events(world: &mut World) {
+    // Query types
+    type OnDeathHandler<'a> = Option<&'a OnDeath>;
+    type OnInteractionHandler<'a> = Option<&'a OnInteract>;
+    type OnEnterRoomHandler<'a> = Option<&'a OnEnterRoom>;
+
     // Queries for this system
-    let mut state: SystemState<
-        Query<(Option<&OnDeath>, Option<&OnInteract>, Option<&OnEnterRoom>)>,
-    > = SystemState::new(world);
+    let mut state: SystemState<Query<(OnDeathHandler, OnInteractionHandler, OnEnterRoomHandler)>> =
+        SystemState::new(world);
 
     // Events to init
     let mut events: Vec<Arc<Mutex<dyn EventHandler>>> = Vec::new();
@@ -147,7 +262,9 @@ fn init_events(world: &mut World) {
             events.push(event.0.clone());
         }
         if let Some(event) = on_interact {
-            events.push(event.0.clone());
+            for handler in event.0.values() {
+                events.push(handler.clone());
+            }
         }
         if let Some(event) = on_enter_room {
             events.push(event.0.clone());
@@ -165,9 +282,7 @@ fn init_events(world: &mut World) {
 // In development, add some code checks to the app start
 #[cfg(debug_assertions)]
 fn build_debug_system_set() -> SystemSet {
-    SystemSet::new()
-        //.with_system(room_checks)
-        .with_system(active_room_check)
+    SystemSet::new().with_system(active_room_check)
 }
 
 // Make sure an active room was defined, and make sure only 1 was defined

@@ -23,7 +23,14 @@ impl Health {
 
 /// For naming entities
 #[derive(Component)]
-pub struct Name(pub String);
+pub struct Name(pub &'static str);
+
+/// Alias an entity
+///
+/// The player can then interact with the entity
+/// by using its alias, in addition to its name.
+#[derive(Component)]
+pub struct Aliases(pub Vec<&'static str>);
 
 /// For giving entities descriptions
 #[derive(Component)]
@@ -34,11 +41,13 @@ pub struct Description(pub String);
 /// A room in the game
 #[derive(Component)]
 pub struct Room {
-    pub name: String,
-    pub description: String,
+    /// Name of the room
+    pub name: &'static str,
+    /// Description of the room (printed w/ autoprompt)
+    pub description: Option<&'static str>,
 }
 
-/// The currently active room
+/// A marker component for the currently active room
 #[derive(Component)]
 pub struct ActiveRoom;
 
@@ -46,26 +55,23 @@ pub struct ActiveRoom;
 #[derive(Component)]
 pub struct Level;
 
-/// The currently active level
-#[derive(Component)]
-pub struct ActiveLevel;
-
 // ========== EVENTS ==========
-use crate::events::EventHandler;
-use bevy_adventure_derive::Event;
+use crate::{events::EventHandler, input_output_manager::WordType};
 use std::sync::{Arc, Mutex};
 
 // The event handler each event stores
 type Handler = Arc<Mutex<dyn EventHandler>>;
 
 /// When an entity dies
-#[derive(Component, Event)]
+#[derive(Component)]
 pub struct OnDeath(pub(crate) Handler);
 
 /// When an entity is interacted with
-#[derive(Component, Event)]
-pub struct OnInteract(pub(crate) Handler);
+///
+/// This event takes one generic - the type of word this interaction handles.
+#[derive(Component)]
+pub struct OnInteract(pub(crate) bevy::utils::HashMap<WordType, Handler>);
 
 /// When the player enters a room
-#[derive(Component, Event)]
+#[derive(Component)]
 pub struct OnEnterRoom(pub(crate) Handler);

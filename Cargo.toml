@@ -9,8 +9,6 @@ name = "rooms"
 [dependencies]
 # The compiled keywords list
 phf = { version = "0.11.1", features = ["macros"] }
-# Macros
-bevy_adventure_derive = {path = "bevy_adventure_derive"}
 
 [dependencies.bevy]
 version = "0.9"

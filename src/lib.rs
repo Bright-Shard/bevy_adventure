@@ -15,6 +15,8 @@ pub mod components;
 pub mod events;
 /// Input & Output manager struct
 pub mod input_output_manager;
+/// Resources for the player
+pub mod player;
 /// The actual bevy_adventure plugin
 pub mod plugin;
 /// The systems built-in to bevy_adventure
@@ -30,8 +32,8 @@ pub mod prelude {
     pub use crate::components::*;
     // Trait modifying Bevy's Commands struct
     pub use crate::adventure_commands::{AdventureCommands, AdventureEntityCommands};
+    // Player resources
+    pub use crate::player::{Checkpoints, Inventory};
     // The plugin itself
     pub use crate::plugin::AdventurePlugin;
-    // Event trait so `Event::new()` can be used
-    pub use crate::events::Event;
 }

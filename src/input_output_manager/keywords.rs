@@ -1,7 +1,7 @@
 use phf::phf_map;
 
 /// The type of action detected from different keywords.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, Hash, PartialEq)]
 pub enum WordType {
     Look,
     Take,
@@ -10,8 +10,11 @@ pub enum WordType {
     Open,
     Break,
     Move,
+    Eat,
+    Give,
     Ignore,
     PotentialTarget,
+    Any,
 }
 
 pub const KEYWORDS: phf::Map<&'static str, WordType> = phf_map! {
@@ -25,8 +28,16 @@ pub const KEYWORDS: phf::Map<&'static str, WordType> = phf_map! {
 
     "use" => WordType::Use,
 
+    "eat" => WordType::Eat,
+    "devour" => WordType::Eat,
+    "drink" => WordType::Eat,
+
     "take" => WordType::Take,
     "steal" => WordType::Take,
+    "get" => WordType::Take,
+
+    "give" => WordType::Give,
+    "hand" => WordType::Give,
 
     "open" => WordType::Open,
     "unlock" => WordType::Open,
@@ -36,12 +47,10 @@ pub const KEYWORDS: phf::Map<&'static str, WordType> = phf_map! {
     "shatter" => WordType::Break,
 
     "move" => WordType::Move,
+    "run" => WordType::Move,
     "go" => WordType::Move,
     "visit" => WordType::Move,
     "enter" => WordType::Move,
-
-    "to" => WordType::Ignore,
-    "the" => WordType::Ignore,
-    "a" => WordType::Ignore,
-    "an" => WordType::Ignore,
+    "leave" => WordType::Move,
+    "exit" => WordType::Move,
 };

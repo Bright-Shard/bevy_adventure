@@ -1,191 +1,141 @@
 use super::IOManager;
-use core::any::TypeId;
 use std::{
     io::{stdin, stdout, Write},
     str::FromStr,
 };
 
-use bevy::{
-    ecs::system::SystemState,
-    prelude::{Children, Entity, HierarchyQueryExt, Query, With, World},
-};
-
-use crate::components::{ActiveRoom, Name};
-use crate::input_output_manager::keywords::WordType;
-
-type ActiveRoomQuery<'world, 'state> = Query<'world, 'state, Entity, With<ActiveRoom>>;
-
-/// Errors when parsing user input
-#[derive(Debug)]
-pub enum ParseError {
-    NoTarget,
-    NoAction,
-}
-
-// The returned user input
-pub struct Input<T: FromStr> {
-    value: T,
-    error_msg: String,
-}
-impl<T: FromStr> Input<T> {
-    pub fn new(value: T, error_msg: &str) -> Self {
-        Self {
-            value,
-            error_msg: error_msg.to_string(),
-        }
-    }
-
-    pub fn get(&self) -> &T {
-        &self.value
-    }
-
-    pub fn get_owned(self) -> T {
-        self.value
-    }
-
-    pub fn error(&self) {
-        println!("{}", self.error_msg);
-    }
-}
-impl Input<String> {
-    // Gets the target and action, then runs appropriate handlers
-    pub fn parse(
-        &self,
-        keywords: phf::Map<&'static str, WordType>,
-        world: &mut World,
-    ) -> Result<Entity, ParseError> {
-        // This system's queries
-        let mut state: SystemState<(Query<&Children>, ActiveRoomQuery, Query<&Name>)> =
-            SystemState::new(world);
-
-        let (children, active_room, names) = state.get(world);
-
-        let split = self.value.split_whitespace();
-
-        let mut potential_targets = Vec::new();
-        let mut action: Option<WordType> = None;
-
-        // Iterate through words and see if they are keywords or not
-        split.for_each(|word| {
-            match keywords.get(&word.to_lowercase()) {
-                // If it isn't a keyword, it might be a target
-                None => potential_targets.push(word),
-                // If it is a keyword,
-                Some(word_type) => match word_type {
-                    // Either ignore it
-                    WordType::Ignore => {}
-                    // Or set it as the action.
-                    _ => {
-                        if action.is_none() {
-                            action = Some(word_type.clone());
-                        }
-                    }
-                },
-            }
-        });
-
-        // If an action type wasn't identified, error out
-        if action.is_none() {
-            return Err(ParseError::NoAction);
-        }
-
-        // Try and get the target of the action
-        // Iterate through the active children
-        let target = children
-            .iter_descendants(active_room.get_single().unwrap())
-            .find(|child| {
-                if let Ok(name) = names.get(*child) {
-                    potential_targets
-                        .iter()
-                        .any(|test_name| *test_name == name.0)
-                } else {
-                    false
-                }
-            });
-
-        // Return the target, or error that no target was found
-        match target {
-            None => Err(ParseError::NoTarget),
-            Some(target_entity) => Ok(target_entity),
-        }
-    }
-}
-impl Input<i32> {}
-
 // Input from player
 impl IOManager {
-    pub fn prompt<T: FromStr + 'static>(prompt: &str, error_msg: &str) -> Input<T> {
-        // Prompt the player for input, as long as the prompt isn't blank
-        if !prompt.is_empty() {
-            Self::println(prompt);
+    /// Prompt player for input, and return a trimmed version of that input.
+    pub fn prompt_raw(&self, prompt_text: &str) -> String {
+        // Check if the cursor is hidden - if it is, we should show it
+        if self.cursor_hidden {
+            Self::temp_show_cursor();
         }
 
-        // Now make the prompt for the player to type into
-        let prompt_type: &str;
-        // If the prompt type is a string, set prompt_type to text
-        // (prompt_type will be used to build the prompt)
-        if TypeId::of::<T>() == TypeId::of::<String>() {
-            prompt_type = "Text";
-        // If it's an i32, set prompt_type to number
-        } else if TypeId::of::<T>() == TypeId::of::<i32>() {
-            prompt_type = "Number";
-        } else {
-            // Failsafe
-            panic!("Unknown type to get input for!")
-        }
-        // The actual prompt
-        let prompt = format!("({prompt_type}) > ");
+        print!("({}) > ", prompt_text);
+        stdout().flush().expect("Error flushing stdOut!");
 
-        // Now loop until the player types something that can be converted into the type we need
+        let mut input = String::new();
+        stdin().read_line(&mut input).expect("Error reading stdIn!");
+
+        // If we need to re-hide the cursor
+        if self.cursor_hidden {
+            Self::temp_hide_cursor();
+        }
+
+        // Trim player input and remove punctuation
+        input.trim().replace(['.', '?', '!', ','], "")
+    }
+    /// Prompt player for input, then run `checker` with the input.
+    ///
+    /// Checker should return an `Option<ResultType>`.
+    /// If checker's result is `Some(x)`, `prompt` will return x.
+    ///
+    /// Effectively, this lets you add a custom check function
+    /// to determine if the input is valid or not.
+    pub fn prompt<InputType, ResultType, Func>(
+        &self,
+        prompt_text: &str,
+        error_msg: &str,
+        checker: Func,
+    ) -> ResultType
+    where
+        Func: Fn(&InputType) -> Option<ResultType>,
+        InputType: FromStr + 'static,
+    {
         loop {
-            // Make a prompt
-            print!("{}", prompt);
-            stdout().flush().expect("Error flushing stdout!");
-
-            // For storing the player input
-            let mut input = String::new();
-
-            // Get the input they type
-            stdin().read_line(&mut input).unwrap();
-
-            // Match it to make sure it's the correct type
-            match input.trim().parse::<T>() {
-                // If it is, return an Input of it
-                Ok(value) => break Input::new(value, error_msg),
-                Err(_) => Self::println(error_msg),
+            // Get raw input from the player and try to convert it into the correct type
+            match self.prompt_raw(prompt_text).parse::<InputType>() {
+                Ok(val) => {
+                    // If it is convertible, run the checker function to see if it's valid
+                    let check = checker(&val);
+                    if let Some(result) = check {
+                        // If it is valid, return the result
+                        break result;
+                    }
+                }
+                // If it can't be converted, error
+                Err(_) => self.println(error_msg),
             }
         }
     }
 
     // Print a list of options, then let the user choose one, and return the chosen option
-    pub fn options_prompt(prompt: &str, raw_options: Vec<&str>) -> String {
+    pub fn options_prompt(&self, choices: Vec<&str>) -> u8 {
         // A new vec holding the options, so we can modify them
-        let mut options = Vec::<String>::new();
+        let mut choices_list = Vec::<String>::new();
         // Add a number before each option (1., 2., etc)
-        raw_options.iter().fold(1, |index, option| {
+        choices.iter().fold(1, |index, option| {
             // Push the number of the option & the option text to options
-            options.push(format!("{}. {}", index, option));
+            choices_list.push(format!("{}. {}", index, option));
 
             // Increase the counter, so the next option's number is 1 higher
             index + 1
         });
 
-        // Print the prompt
-        println!("{}", prompt);
         // Print the choices
-        Self::printlns(options);
+        self.printlns(choices_list);
 
-        // Loop getting player input until they choose a valid option, then return it
-        loop {
-            // Get player input
-            let input =
-                Self::prompt::<i32>("Choose 1", "Please type the number of the option you want.");
+        // Prompt player for input, and return the number they chose
+        self.prompt(
+            "Choose 1",
+            "Please type the number of the option you want.",
+            |test_choice: &u8| {
+                if usize::from(test_choice - 1) < choices.len() {
+                    Some(*test_choice)
+                } else {
+                    None
+                }
+            },
+        )
+    }
 
-            // Now make sure the input is actually one of the options we printed
-            match raw_options.get((input.get() - 1) as usize) {
-                Some(choice) => break String::from(*choice),
-                None => Self::println("Please choose an option that was printed."),
+    // Make the player choose one of two options
+    pub fn two_option_prompt(&self, error_msg: &str, option_one: &str, option_two: &str) -> u8 {
+        // Lowercase variants
+        let option_two_lower = option_two.to_lowercase();
+        let option_one_lower = option_one.to_lowercase();
+
+        // Make a prompt for the player
+        let prompt = format!("{option_one}/{option_two}");
+
+        // Get player input, then checker will determine if it's option 1 or 2
+        self.prompt(&prompt, error_msg, |choice: &String| {
+            // Make the input lowercase
+            let choice = choice.to_lowercase();
+
+            if choice.chars().count() == 1 {
+                // If the input is only 1 letter, see if it matches the first letter of either option
+                let cropped_choice = choice.chars().next().unwrap();
+
+                if cropped_choice == option_one_lower.chars().next().unwrap() {
+                    Some(1)
+                } else if cropped_choice == option_two_lower.chars().next().unwrap() {
+                    Some(2)
+                } else {
+                    None
+                }
+            } else {
+                // Otherwise, see if it matches either option
+                if choice == option_one_lower {
+                    Some(1)
+                } else if choice == option_two_lower {
+                    Some(2)
+                } else {
+                    None
+                }
             }
-        }
+        })
+    }
+
+    /// Yes/No Prompt: Returns true if the player responded "yes", and false if they responded "no".
+    pub fn yes_no_prompt(&self) -> bool {
+        self.two_option_prompt("Please type Y or N.", "Y", "n") == 1
+    }
+
+    /// Enable the AutoPrompt system
+    pub fn autoprompt(&mut self) {
+        self.autoprompt = true;
     }
 }

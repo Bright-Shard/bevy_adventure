@@ -1,3 +1,5 @@
+use crate::input_output_manager::IOManager;
+use crate::player::{Checkpoints, Inventory};
 use crate::systems;
 use bevy::app::{App, Plugin, PluginGroup, PluginGroupBuilder};
 use bevy::prelude::MinimalPlugins;
@@ -22,12 +24,21 @@ impl PluginGroup for AdventureDefaultPlugins {
 pub struct AdventurePlugin;
 impl Plugin for AdventurePlugin {
     fn build(&self, app: &mut App) {
+        let new_room_state = systems::NewRoomState::new(&mut app.world);
         // Add plugins
         app
             // Core Bevy plugins
             .add_plugins(MinimalPlugins)
             // Other plugins needed for adventure games
-            .add_plugins(AdventureDefaultPlugins);
+            .add_plugins(AdventureDefaultPlugins)
+            // IOManager Resource
+            .insert_resource(IOManager::new())
+            // Inventory Resrouce
+            .insert_resource(Inventory(Vec::new()))
+            // Checkpoint resource
+            .insert_resource(Checkpoints(Vec::new()))
+            // Cached SystemStates
+            .insert_resource(new_room_state);
 
         // Add systems
         systems::append_systems(app);
