@@ -74,7 +74,10 @@ fn take_food(
     mut inv: ResMut<Inventory>,
     query: Query<(Entity, &bevy_adventure::prelude::Name)>,
 ) {
-    let (food_entity, _) = query.iter().find(|(_, name)| name.0 == "food").unwrap();
+    let (food_entity, _) = query
+        .iter()
+        .find(|(_, name)| name.0 == "remove_one_food")
+        .unwrap();
 
     if !inv.0.contains(&food_entity) {
         iomgr.println("You take some of the food for yourself.");
@@ -101,7 +104,10 @@ fn give_food(
     mut checkpoints: ResMut<Checkpoints>,
     query: Query<(Entity, &bevy_adventure::prelude::Name)>,
 ) {
-    let (food_entity, _) = query.iter().find(|(_, name)| name.0 == "food").unwrap();
+    let (food_entity, _) = query
+        .iter()
+        .find(|(_, name)| name.0 == "remove_one_food")
+        .unwrap();
 
     if inv.0.contains(&food_entity) && !checkpoints.0.contains(&"fedKids") {
         iomgr.println("You give some food to the kids. They eat quickly, and look much better aftwards, but a little tired.");
@@ -131,7 +137,10 @@ fn sleep(mut cmds: Commands, iomgr: Res<IOManager>, checkpoints: Res<Checkpoints
 
 pub fn build(mut cmds: Commands) {
     let food = cmds
-        .spawn((Name("food"), Aliases(vec!["meat", "meats"])))
+        .spawn((
+            Name("remove_one_food"),
+            Aliases(vec!["food", "meat", "meats"]),
+        ))
         .on_interact(WordType::Eat, eat_food)
         .on_interact(WordType::Take, take_food)
         .on_interact(WordType::Give, give_food)
